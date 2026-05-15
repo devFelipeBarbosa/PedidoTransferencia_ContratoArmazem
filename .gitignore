@@ -1,0 +1,20 @@
+# Build
+build/
+out/
+*.class
+
+# Gradle cache
+.gradle/
+
+# Sankhya JARs locais (não versionar)
+libs/
+
+# Dados de sessão capturados
+*.har
+
+# Claude Code
+.claude/
+
+# IDE
+.idea/
+*.iml
