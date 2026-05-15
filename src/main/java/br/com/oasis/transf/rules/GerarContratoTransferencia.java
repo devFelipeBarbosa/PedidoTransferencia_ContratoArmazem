@@ -8,14 +8,26 @@ import br.com.sankhya.extensions.regrasnegocio.ContextoRegra;
 import br.com.sankhya.extensions.regrasnegocio.RegraNegocioJava;
 import br.com.sankhya.jape.core.JapeSession;
 
+import java.lang.management.ManagementFactory;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
 
 public class GerarContratoTransferencia implements RegraNegocioJava {
 
-    // Endereço base do servidor — localhost pois a regra roda server-side
-    private static final String HOST = "http://127.0.0.1:8261";
+    private static String resolveHost() {
+        try {
+            MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+            ObjectName on = new ObjectName(
+                "jboss.as:socket-binding-group=standard-sockets,socket-binding=http");
+            Object boundPort = mbs.getAttribute(on, "boundPort");
+            return "http://127.0.0.1:" + boundPort;
+        } catch (Exception e) {
+            return "http://127.0.0.1:8080";
+        }
+    }
 
     @Override
     public void executa(ContextoRegra contexto) throws Exception {
@@ -50,7 +62,7 @@ public class GerarContratoTransferencia implements RegraNegocioJava {
 
         // [6] Invocar gerarPedidoComercializacao via HTTP interno
         String mgeSession = JapeSession.getCurrentSession().getSessionGlobalID();
-        BigDecimal nuNotaMatriz = GerarPedidoService.gerar(HOST, mgeSession, tcsconData);
+        BigDecimal nuNotaMatriz = GerarPedidoService.gerar(resolveHost(), mgeSession, tcsconData);
 
         // [7] Gravar NUMCONTRATO no campo adicional do pedido
         atualizarNumContrato(contexto, nuNota, numContrato);
