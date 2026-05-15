@@ -63,6 +63,7 @@ public class ContratoArmazemService {
             q.setParam("COBPROPORCAR",   COBPROPORCAR);
             q.setParam("SITCONT",        "A");
             q.setParam("DTCONTRATO",     now);
+            q.setParam("DTBASEREAJ",     now);
             q.setParam("CODUSU",         codusu);
             q.setParam("CODSAF",         toBD(pedido.get("AD_CODSAF")));
             q.setParam("UNICONVSC",      toBD(pedido.get("AD_UNICONVSC")));
@@ -81,13 +82,13 @@ public class ContratoArmazemService {
                 "INSERT INTO TCSCON (" +
                 "  NUMCONTRATO, CODEMP, CODPARC, ATIVO, CIF_FOB, PADCLASS, CODMOEDA," +
                 "  CODCONTATO, EXIGEPEDIDOPES, MODALIDADE, TIPOARM, TIPO, COBPROPORCAR," +
-                "  SITCONT, DTCONTRATO, CODUSU, CODSAF, UNICONVSC, CODTIPVENDA, TIPOCONTRATO," +
+                "  SITCONT, DTCONTRATO, DTBASEREAJ, CODUSU, CODSAF, UNICONVSC, CODTIPVENDA, TIPOCONTRATO," +
                 "  QTDNEG, VALNEGSC, DTINIENTREGA, DTTERMINO, PERCTOLEXCED, TIPOTITULO," +
                 "  CODNAT, CODCENCUS" +
                 ") VALUES (" +
                 "  {NUMCONTRATO}, {CODEMP}, {CODPARC}, {ATIVO}, {CIF_FOB}, {PADCLASS}, {CODMOEDA}," +
                 "  {CODCONTATO}, {EXIGEPEDIDOPES}, {MODALIDADE}, {TIPOARM}, {TIPO}, {COBPROPORCAR}," +
-                "  {SITCONT}, {DTCONTRATO}, {CODUSU}, {CODSAF}, {UNICONVSC}, {CODTIPVENDA}, {TIPOCONTRATO}," +
+                "  {SITCONT}, {DTCONTRATO}, {DTBASEREAJ}, {CODUSU}, {CODSAF}, {UNICONVSC}, {CODTIPVENDA}, {TIPOCONTRATO}," +
                 "  {QTDNEG}, {VALNEGSC}, {DTINIENTREGA}, {DTTERMINO}, {PERCTOLEXCED}, {TIPOTITULO}," +
                 "  {CODNAT}, {CODCENCUS}" +
                 ")"
