@@ -42,8 +42,8 @@ public class ContratoArmazemService {
     }
 
     private static BigDecimal inserirTcscon(Map<String, Object> pedido) throws Exception {
-        EntityFacade facade = EntityFacade.getInstance("TCSCON");
-        EntityVO voEntity = facade.getDefaultValueObjectInstance("TCSCON");
+        EntityFacade facade = EntityFacade.getInstance("ContratoArmazenagemGeral");
+        EntityVO voEntity = facade.getDefaultValueObjectInstance("ContratoArmazenagemGeral");
         DynamicVO vo = (DynamicVO) voEntity;
 
         // Campos fixos
@@ -78,13 +78,13 @@ public class ContratoArmazemService {
         vo.setProperty("CODNAT",    toBD(pedido.get("CODNAT")));
         vo.setProperty("CODCENCUS", toBD(pedido.get("CODCENCUS")));
 
-        facade.createEntity("TCSCON", voEntity);
+        facade.createEntity("ContratoArmazenagemGeral", voEntity);
         return vo.asBigDecimal("NUMCONTRATO");
     }
 
     private static void inserirTcspsc(BigDecimal numContrato, BigDecimal codProdPA) throws Exception {
-        EntityFacade facade = EntityFacade.getInstance("TCSPSC");
-        EntityVO voEntity = facade.getDefaultValueObjectInstance("TCSPSC");
+        EntityFacade facade = EntityFacade.getInstance("ProdutoServicoContrato2");
+        EntityVO voEntity = facade.getDefaultValueObjectInstance("ProdutoServicoContrato2");
         DynamicVO vo = (DynamicVO) voEntity;
 
         vo.setProperty("NUMCONTRATO",  numContrato);
@@ -99,7 +99,7 @@ public class ContratoArmazemService {
         vo.setProperty("CODUSUALTREG", BigDecimal.ZERO);
         vo.setProperty("DHALTREG",     new Timestamp(new Date().getTime()));
 
-        facade.createEntity("TCSPSC", voEntity);
+        facade.createEntity("ProdutoServicoContrato2", voEntity);
     }
 
     private static Map<String, Object> buildTcsconMap(BigDecimal numContrato,
