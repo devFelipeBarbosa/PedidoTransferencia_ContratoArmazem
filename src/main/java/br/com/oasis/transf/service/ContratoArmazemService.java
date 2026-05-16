@@ -1,5 +1,6 @@
 package br.com.oasis.transf.service;
 
+import br.com.oasis.transf.util.TLogCatcher;
 import br.com.sankhya.extensions.actionbutton.QueryExecutor;
 import br.com.sankhya.extensions.regrasnegocio.ContextoRegra;
 import java.math.BigDecimal;
@@ -25,115 +26,125 @@ public class ContratoArmazemService {
 
     private ContratoArmazemService() {}
 
+    /**
+     * Cria TCSCON + TCSPSC via PL/SQL PRAGMA AUTONOMOUS_TRANSACTION.
+     * O COMMIT autônomo torna o registro visível antes do HTTP call
+     * ao gerarPedidoComercializacao.
+     * NUMCONTRATO gerado via TGFNUM (mesma lógica do ERP).
+     */
     public static Map<String, Object> criar(ContextoRegra contexto,
                                              Map<String, Object> pedido,
                                              BigDecimal codProdPA) throws Exception {
-        BigDecimal numContrato = inserirTcscon(contexto, pedido);
-        inserirTcspsc(contexto, numContrato, codProdPA);
+        BigDecimal numContrato = reservarSequencia(contexto);
+
+        Timestamp now    = new Timestamp(new Date().getTime());
+        BigDecimal codusu = contexto.getUsuarioLogado();
+
+        QueryExecutor q = contexto.getQuery();
+        try {
+            // NC / NC2: mesmo valor, nomes distintos para {PARAM} em dois INSERTs
+            q.setParam("NC",           numContrato);
+            q.setParam("NC2",          numContrato);
+            q.setParam("CODUSU",       codusu);
+            q.setParam("DTCONTRATO",   now);
+            q.setParam("DTBASEREAJ",   now);
+            q.setParam("DHALTREG",     now);
+            q.setParam("CODSAF",       toBD(pedido.get("AD_CODSAF")));
+            q.setParam("UNICONVSC",    toBD(pedido.get("AD_UNICONVSC")));
+            q.setParam("CODTIPVENDA",  toBD(pedido.get("AD_CODTIPVENDA_CT")));
+            q.setParam("TIPOCONTRATO", toStr(pedido.get("AD_TIPOCONTRATO")));
+            q.setParam("QTDNEG",       toBD(pedido.get("AD_QTDNEG_SC")));
+            q.setParam("VALNEGSC",     toBD(pedido.get("AD_VALNEGSC")));
+            q.setParam("DTINIENTREGA", toTs(pedido.get("AD_DTINIENTREGA")));
+            q.setParam("DTTERMINO",    toTs(pedido.get("AD_DTTERMINO")));
+            q.setParam("PERCTOLEXCED", toBD(pedido.get("AD_PERCTOLEXCED")));
+            q.setParam("TIPOTITULO",   toBD(pedido.get("AD_TIPOTITULO_CT")));
+            q.setParam("CODNAT",       toBD(pedido.get("CODNAT")));
+            q.setParam("CODCENCUS",    toBD(pedido.get("CODCENCUS")));
+            q.setParam("TIPCON",       toStr(pedido.get("AD_TIPCON")));
+            q.setParam("CODPROD",      codProdPA);
+
+            q.update(
+                "DECLARE\n" +
+                "  PRAGMA AUTONOMOUS_TRANSACTION;\n" +
+                "BEGIN\n" +
+                "  INSERT INTO TCSCON (\n" +
+                "    NUMCONTRATO, CODEMP, CODPARC, ATIVO, CIF_FOB, PADCLASS, CODMOEDA,\n" +
+                "    CODCONTATO, EXIGEPEDIDOPES, MODALIDADE, TIPOARM, TIPO, COBPROPORCAR,\n" +
+                "    SITCONT, DTCONTRATO, DTBASEREAJ, CODUSU,\n" +
+                "    CODSAF, UNICONVSC, CODTIPVENDA, TIPOCONTRATO, TIPCON,\n" +
+                "    QTDNEG, VALNEGSC, DTINIENTREGA, DTTERMINO,\n" +
+                "    PERCTOLEXCED, TIPOTITULO, CODNAT, CODCENCUS\n" +
+                "  ) VALUES (\n" +
+                "    {NC}, " + CODEMP + ", " + CODPARC + ", '" + ATIVO + "', '" + CIF_FOB + "', " +
+                    PADCLASS + ", " + CODMOEDA + ",\n" +
+                "    " + CODCONTATO + ", '" + EXIGEPEDIDOPES + "', '" + MODALIDADE + "', '" +
+                    TIPOARM + "', '" + TIPO + "', '" + COBPROPORCAR + "',\n" +
+                "    'A', {DTCONTRATO}, {DTBASEREAJ}, {CODUSU},\n" +
+                "    {CODSAF}, {UNICONVSC}, {CODTIPVENDA}, {TIPOCONTRATO}, {TIPCON},\n" +
+                "    {QTDNEG}, {VALNEGSC}, {DTINIENTREGA}, {DTTERMINO},\n" +
+                "    {PERCTOLEXCED}, {TIPOTITULO}, {CODNAT}, {CODCENCUS}\n" +
+                "  );\n" +
+                "  INSERT INTO TCSPSC (\n" +
+                "    NUMCONTRATO, CODPROD, SITPROD, IMPRNOTA, IMPROS,\n" +
+                "    LIMITANTE, PRODPRINC, QTDEPREVISTA, VLRUNIT, CODUSUALTREG, DHALTREG\n" +
+                "  ) VALUES (\n" +
+                "    {NC2}, {CODPROD}, 'A', 'S', 'N',\n" +
+                "    'N', 'N', 0, 0, 0, {DHALTREG}\n" +
+                "  );\n" +
+                "  COMMIT;\n" +
+                "END;"
+            );
+        } catch (Exception e) {
+            TLogCatcher.logError("Erro em ContratoArmazemService.criar NUMCONTRATO=" + numContrato, e);
+            throw e;
+        } finally {
+            q.close();
+        }
+
         return buildTcsconMap(numContrato, pedido, codProdPA);
     }
 
-    private static BigDecimal inserirTcscon(ContextoRegra contexto,
-                                             Map<String, Object> pedido) throws Exception {
+    /**
+     * Reserva próximo NUMCONTRATO via TGFNUM (mesma lógica do ERP).
+     * Executado na TX principal — bloqueia o counter até commit/rollback.
+     */
+    private static BigDecimal reservarSequencia(ContextoRegra contexto) throws Exception {
         BigDecimal numContrato;
-        QueryExecutor qSeq = contexto.getQuery();
+        QueryExecutor qSel = contexto.getQuery();
         try {
-            qSeq.nativeSelect("SELECT NVL(MAX(NUMCONTRATO), 0) + 1 AS NUMCONTRATO FROM TCSCON");
-            numContrato = qSeq.next() ? qSeq.getBigDecimal("NUMCONTRATO") : BigDecimal.ONE;
-        } finally {
-            qSeq.close();
-        }
-
-        Timestamp now = new Timestamp(new Date().getTime());
-        BigDecimal codusu = contexto.getUsuarioLogado();
-        QueryExecutor q = contexto.getQuery();
-        try {
-            q.setParam("NUMCONTRATO",    numContrato);
-            q.setParam("CODEMP",         new BigDecimal(CODEMP));
-            q.setParam("CODPARC",        new BigDecimal(CODPARC));
-            q.setParam("ATIVO",          ATIVO);
-            q.setParam("CIF_FOB",        CIF_FOB);
-            q.setParam("PADCLASS",       new BigDecimal(PADCLASS));
-            q.setParam("CODMOEDA",       new BigDecimal(CODMOEDA));
-            q.setParam("CODCONTATO",     new BigDecimal(CODCONTATO));
-            q.setParam("EXIGEPEDIDOPES", EXIGEPEDIDOPES);
-            q.setParam("MODALIDADE",     MODALIDADE);
-            q.setParam("TIPOARM",        TIPOARM);
-            q.setParam("TIPO",           TIPO);
-            q.setParam("COBPROPORCAR",   COBPROPORCAR);
-            q.setParam("SITCONT",        "A");
-            q.setParam("DTCONTRATO",     now);
-            q.setParam("DTBASEREAJ",     now);
-            q.setParam("CODUSU",         codusu);
-            q.setParam("CODSAF",         toBD(pedido.get("AD_CODSAF")));
-            q.setParam("UNICONVSC",      toBD(pedido.get("AD_UNICONVSC")));
-            q.setParam("CODTIPVENDA",    toBD(pedido.get("AD_CODTIPVENDA_CT")));
-            q.setParam("TIPOCONTRATO",   toStr(pedido.get("AD_TIPOCONTRATO")));
-            q.setParam("QTDNEG",         toBD(pedido.get("AD_QTDNEG_SC")));
-            q.setParam("VALNEGSC",       toBD(pedido.get("AD_VALNEGSC")));
-            q.setParam("DTINIENTREGA",   toTs(pedido.get("AD_DTINIENTREGA")));
-            q.setParam("DTTERMINO",      toTs(pedido.get("AD_DTTERMINO")));
-            q.setParam("PERCTOLEXCED",   toBD(pedido.get("AD_PERCTOLEXCED")));
-            q.setParam("TIPOTITULO",     toBD(pedido.get("AD_TIPOTITULO_CT")));
-            q.setParam("CODNAT",         toBD(pedido.get("CODNAT")));
-            q.setParam("CODCENCUS",      toBD(pedido.get("CODCENCUS")));
-
-            q.update(
-                "INSERT INTO TCSCON (" +
-                "  NUMCONTRATO, CODEMP, CODPARC, ATIVO, CIF_FOB, PADCLASS, CODMOEDA," +
-                "  CODCONTATO, EXIGEPEDIDOPES, MODALIDADE, TIPOARM, TIPO, COBPROPORCAR," +
-                "  SITCONT, DTCONTRATO, DTBASEREAJ, CODUSU, CODSAF, UNICONVSC, CODTIPVENDA, TIPOCONTRATO," +
-                "  QTDNEG, VALNEGSC, DTINIENTREGA, DTTERMINO, PERCTOLEXCED, TIPOTITULO," +
-                "  CODNAT, CODCENCUS" +
-                ") VALUES (" +
-                "  {NUMCONTRATO}, {CODEMP}, {CODPARC}, {ATIVO}, {CIF_FOB}, {PADCLASS}, {CODMOEDA}," +
-                "  {CODCONTATO}, {EXIGEPEDIDOPES}, {MODALIDADE}, {TIPOARM}, {TIPO}, {COBPROPORCAR}," +
-                "  {SITCONT}, {DTCONTRATO}, {DTBASEREAJ}, {CODUSU}, {CODSAF}, {UNICONVSC}, {CODTIPVENDA}, {TIPOCONTRATO}," +
-                "  {QTDNEG}, {VALNEGSC}, {DTINIENTREGA}, {DTTERMINO}, {PERCTOLEXCED}, {TIPOTITULO}," +
-                "  {CODNAT}, {CODCENCUS}" +
-                ")"
+            qSel.nativeSelect(
+                "SELECT NVL(ULTCOD, 0) + 1 AS NC FROM TGFNUM " +
+                "WHERE ARQUIVO = 'TCSCON' AND CODEMP = 1 AND SERIE = '.'"
             );
+            numContrato = qSel.next() ? qSel.getBigDecimal("NC") : BigDecimal.ONE;
+        } catch (Exception e) {
+            TLogCatcher.logError("Erro em reservarSequencia (SELECT TGFNUM)", e);
+            throw e;
         } finally {
-            q.close();
+            qSel.close();
         }
+
+        QueryExecutor qUpd = contexto.getQuery();
+        try {
+            qUpd.setParam("NC", numContrato);
+            qUpd.update(
+                "UPDATE TGFNUM SET ULTCOD = {NC} " +
+                "WHERE ARQUIVO = 'TCSCON' AND CODEMP = 1 AND SERIE = '.'"
+            );
+        } catch (Exception e) {
+            TLogCatcher.logError("Erro em reservarSequencia (UPDATE TGFNUM) NC=" + numContrato, e);
+            throw e;
+        } finally {
+            qUpd.close();
+        }
+
         return numContrato;
     }
 
-    private static void inserirTcspsc(ContextoRegra contexto,
-                                       BigDecimal numContrato,
-                                       BigDecimal codProdPA) throws Exception {
-        Timestamp now = new Timestamp(new Date().getTime());
-        QueryExecutor q = contexto.getQuery();
-        try {
-            q.setParam("NUMCONTRATO",  numContrato);
-            q.setParam("CODPROD",      codProdPA);
-            q.setParam("SITPROD",      "A");
-            q.setParam("IMPRNOTA",     "S");
-            q.setParam("IMPROS",       "N");
-            q.setParam("LIMITANTE",    "N");
-            q.setParam("PRODPRINC",    "N");
-            q.setParam("QTDEPREVISTA", BigDecimal.ZERO);
-            q.setParam("VLRUNIT",      BigDecimal.ZERO);
-            q.setParam("CODUSUALTREG", BigDecimal.ZERO);
-            q.setParam("DHALTREG",     now);
-
-            q.update(
-                "INSERT INTO TCSPSC (" +
-                "  NUMCONTRATO, CODPROD, SITPROD, IMPRNOTA, IMPROS, LIMITANTE, PRODPRINC," +
-                "  QTDEPREVISTA, VLRUNIT, CODUSUALTREG, DHALTREG" +
-                ") VALUES (" +
-                "  {NUMCONTRATO}, {CODPROD}, {SITPROD}, {IMPRNOTA}, {IMPROS}, {LIMITANTE}, {PRODPRINC}," +
-                "  {QTDEPREVISTA}, {VLRUNIT}, {CODUSUALTREG}, {DHALTREG}" +
-                ")"
-            );
-        } finally {
-            q.close();
-        }
-    }
-
-    private static Map<String, Object> buildTcsconMap(BigDecimal numContrato,
-                                                       Map<String, Object> pedido,
-                                                       BigDecimal codProdPA) {
+    public static Map<String, Object> buildTcsconMap(BigDecimal numContrato,
+                                                      Map<String, Object> pedido,
+                                                      BigDecimal codProdPA) {
         Map<String, Object> m = new HashMap<>();
         m.put("NUMCONTRATO",    numContrato);
         m.put("CODPROD",        codProdPA);
@@ -162,6 +173,7 @@ public class ContratoArmazemService {
         m.put("TIPOTITULO",     pedido.get("AD_TIPOTITULO_CT"));
         m.put("CODNAT",         pedido.get("CODNAT"));
         m.put("CODCENCUS",      pedido.get("CODCENCUS"));
+        m.put("TIPCON",         pedido.get("AD_TIPCON"));
         return m;
     }
 

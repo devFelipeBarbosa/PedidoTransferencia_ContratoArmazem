@@ -1,83 +1,94 @@
 package br.com.oasis.transf.service;
 
-import br.com.oasis.transf.util.HttpUtil;
+import br.com.oasis.transf.util.TLogCatcher;
+import br.com.sankhya.armazem.model.helper.ArmazensGeraisHelper;
+import br.com.sankhya.jape.EntityFacade;
+import br.com.sankhya.jape.dao.JdbcWrapper;
+import br.com.sankhya.jape.sql.NativeSql;
+import br.com.sankhya.modelcore.util.EntityFacadeFactory;
+
 import java.math.BigDecimal;
+import java.sql.ResultSet;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 
 public class GerarPedidoService {
 
-    private static final int COD_TIP_OPER = 3006;
-    private static final int COD_LOCAL    = 3030100;
+    private static final BigDecimal COD_TIP_OPER = new BigDecimal(3006);
+    private static final BigDecimal COD_LOCAL    = new BigDecimal(3030100);
+    private static final String     SERIE        = "";
+    private static final String     CONTROLE     = " ";
 
     private GerarPedidoService() {}
 
     /**
-     * Invoca ContratosArmazemGeralSP.gerarPedidoComercializacao.
+     * Gera Pedido de Compra de Comercialização chamando direto
+     * ArmazensGeraisHelper.criarNotaComercializacao — mesmo método interno
+     * que ContratosArmazemGeralSPBean.gerarPedidoComercializacao invoca.
+     * Sem HTTP, sem ServiceContext, sem PlatformService — JVM nativa.
      *
-     * @param host       ex: "http://localhost:8261"
-     * @param mgeSession token de sessão do usuário logado
-     * @param tcscon     Map com todos os campos do TCSCON criado
-     * @return           NUNOTA do Pedido de Compra gerado na Matriz
+     * @param numContrato NUMCONTRATO do TCSCON recém-criado
+     * @param tipcon      AD_TIPCON do pedido da Filial ('B' = Bolsa, requer cotação)
+     * @return            NUNOTA do Pedido de Compra gerado
      */
-    public static BigDecimal gerar(String host, String mgeSession, Map<String, Object> tcscon) throws Exception {
-        String url = host + "/armazem/service.sbr"
-            + "?serviceName=ContratosArmazemGeralSP.gerarPedidoComercializacao"
-            + "&outputType=json"
-            + "&application=ContratosArmazemGeral"
-            + "&resourceID=br.com.sankhya.armazem.cad.cont.armazem"
-            + "&mgeSession=" + mgeSession;
+    public static BigDecimal gerar(BigDecimal numContrato, String tipcon) throws Exception {
+        EntityFacade dwf = EntityFacadeFactory.getDWFFacade();
+        JdbcWrapper jdbc = dwf.getJdbcWrapper();
 
         String dtEmissao = new SimpleDateFormat("dd/MM/yyyy").format(new Date());
-        String body = buildPayload(tcscon, dtEmissao);
 
-        String response = HttpUtil.post(url, body);
-        return parseNunota(response);
-    }
+        Map<String, Object> params = new HashMap<>();
+        params.put("DTEMISSAO",  dtEmissao);
+        params.put("CODTIPOPER", COD_TIP_OPER);
+        params.put("SERIE",      SERIE);
+        params.put("CODLOCAL",   COD_LOCAL);
+        params.put("CONTROLE",   CONTROLE);
 
-    static String buildPayload(Map<String, Object> tcscon, String dtEmissao) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\"serviceName\":\"ContratosArmazemGeralSP.gerarPedidoComercializacao\",");
-        sb.append("\"requestBody\":{");
-        sb.append("\"contratos\":{\"loadRecordsRequest\":[{");
+        BigDecimal cotacao = "B".equals(tipcon)
+            ? buscarCotacao(jdbc, numContrato)
+            : BigDecimal.ZERO;
 
-        boolean first = true;
-        for (Map.Entry<String, Object> e : tcscon.entrySet()) {
-            if (!first) sb.append(",");
-            sb.append("\"").append(e.getKey()).append("\":");
-            Object v = e.getValue();
-            if (v == null) {
-                sb.append("\"\"");
-            } else if (v instanceof Number) {
-                sb.append(v);
-            } else {
-                sb.append("\"").append(String.valueOf(v).replace("\"", "\\\"")).append("\"");
-            }
-            first = false;
+        TLogCatcher.logInfo("Chamando ArmazensGeraisHelper.criarNotaComercializacao NUMCONTRATO="
+            + numContrato + " TIPCON=" + tipcon + " COTACAO=" + cotacao);
+
+        BigDecimal nunota = ArmazensGeraisHelper.criarNotaComercializacao(
+            jdbc, dwf, numContrato, params, null, cotacao
+        );
+
+        if (nunota == null) {
+            throw new Exception("criarNotaComercializacao retornou null para NUMCONTRATO=" + numContrato);
         }
-
-        sb.append("}]},");
-        sb.append("\"codTipOper\":").append(COD_TIP_OPER).append(",");
-        sb.append("\"dtEmissao\":\"").append(dtEmissao).append("\",");
-        sb.append("\"codLocal\":").append(COD_LOCAL).append(",");
-        sb.append("\"controle\":\" \"}}");
-        return sb.toString();
+        return nunota;
     }
 
     /**
-     * Extrai NUNOTA do response.
-     * Formato: {"responseBody":{"mensagem":{"$":"83977,"}}}
-     * Retorna o primeiro NUNOTA da lista.
+     * Busca COTACAO em TSICOT para a moeda PPAUTASC do contrato (data mais recente).
+     * Replica lógica do SP nativo quando TIPCON='B'.
      */
-    static BigDecimal parseNunota(String response) throws Exception {
-        String marker = "\"mensagem\":{\"$\":\"";
-        int idx = response.indexOf(marker);
-        if (idx < 0) throw new Exception("Resposta inesperada do service Armazem: " + response);
-        int start = idx + marker.length();
-        int end = response.indexOf("\"", start);
-        String raw = response.substring(start, end).trim();
-        if (raw.isEmpty()) throw new Exception("NUNOTA nao encontrado na resposta: " + response);
-        return new BigDecimal(raw.split(",")[0].trim());
+    private static BigDecimal buscarCotacao(JdbcWrapper jdbc, BigDecimal numContrato) throws Exception {
+        NativeSql sql = new NativeSql(jdbc);
+        ResultSet rs = null;
+        try {
+            sql.appendSql(" SELECT TSICOT.COTACAO");
+            sql.appendSql("   FROM TSICOT");
+            sql.appendSql("  WHERE TSICOT.CODMOEDA = (");
+            sql.appendSql("        SELECT CON1.PPAUTASC FROM TCSCON CON1 WHERE CON1.NUMCONTRATO = ?)");
+            sql.appendSql("    AND TSICOT.DTMOV = (");
+            sql.appendSql("        SELECT MAX(DTMOV) FROM TSICOT");
+            sql.appendSql("         WHERE CODMOEDA = (SELECT CON1.PPAUTASC FROM TCSCON CON1 WHERE CON1.NUMCONTRATO = ?))");
+            sql.addParameter(numContrato);
+            sql.addParameter(numContrato);
+
+            rs = sql.executeQuery();
+            BigDecimal cotacao = BigDecimal.ZERO;
+            if (rs != null && rs.next()) {
+                cotacao = rs.getBigDecimal("COTACAO");
+            }
+            return cotacao == null ? BigDecimal.ZERO : cotacao;
+        } finally {
+            NativeSql.releaseResources(sql);
+        }
     }
 }

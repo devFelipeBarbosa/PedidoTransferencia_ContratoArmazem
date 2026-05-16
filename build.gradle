@@ -18,6 +18,8 @@ dependencies {
     compileOnly fileTree(dir: 'libs', include: ['*.jar'])
 }
 
+compileJava.options.encoding = 'UTF-8'
+
 jar {
     archiveFileName = "oasis-transf-contrato-${version}.jar"
     from sourceSets.main.output

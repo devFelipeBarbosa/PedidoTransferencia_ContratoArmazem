@@ -2,6 +2,7 @@
 build/
 out/
 *.class
+/br/
 
 # Gradle cache
 .gradle/
@@ -11,6 +12,14 @@ libs/
 
 # Dados de sessão capturados
 *.har
+monitor/
+
+# Logs runtime
+logs/
+
+# Screenshots de teste / banco
+tst/
+db/*.png
 
 # Claude Code
 .claude/
