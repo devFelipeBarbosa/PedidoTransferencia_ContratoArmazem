@@ -141,7 +141,7 @@ Padrão enterprise: tabela própria, state machine, lock pessimista, retry, idem
 ### 2. Criação de TCSCON via `EntityFacade.createEntity`
 
 Em vez de INSERT PL/SQL manual:
-- `EntityFacade.createEntity("ContratoArmazenagemGeral", vo)` — Sankhya gera `NUMCONTRATO` via TGFNUM atomicamente
+- `EntityFacade.createEntity("ContratoArmazenagemGeral", vo)` — Sankhya gera `NUMCONTRATO` via TGFNUM
 - Setar `CODPROD` + `QTDEPREVISTA` no VO do contrato → `ContratoArmazenagemGeralListener.afterInsert` chama `insertAlteraCodProd(vo)` que **cria TCSPSC automaticamente** com `PRODPRINC='S'`
 
 ### 3. Lock pessimista cluster-safe
@@ -347,4 +347,6 @@ JARs não são versionados (ver `.gitignore`). Copiados de:
 
 ## Autoria
 
-Felipe Barbosa — Oasis Alimentos
+Felipe Barbosa — CONCEITO EMPRESARIAL (BP RECIFE)
+Cláudia Fu-Wax (Assistente Cluade Code)
+Bruna Stefany (Apoio Técnico)
