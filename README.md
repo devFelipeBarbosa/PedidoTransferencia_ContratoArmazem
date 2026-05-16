@@ -346,7 +346,6 @@ JARs não são versionados (ver `.gitignore`). Copiados de:
 ---
 
 ## Autoria
-
-Felipe Barbosa — CONCEITO EMPRESARIAL (BP RECIFE)
-Cláudia Fu-Wax (Assistente Cluade Code)
-Bruna Stefany (Apoio Técnico)
+- **Felipe Barbosa** — CONCEITO EMPRESARIAL (BP RECIFE)
+- Cláudia Fu-Wax (Assistente Cluade Code)
+- Bruna Stefany (Apoio Técnico)
