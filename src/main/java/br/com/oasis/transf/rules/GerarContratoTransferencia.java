@@ -13,8 +13,10 @@ import br.com.sankhya.modelcore.util.EntityFacadeFactory;
 import br.com.sankhya.modelcore.util.SWRepositoryUtils;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 public class GerarContratoTransferencia implements RegraNegocioJava {
@@ -40,6 +42,7 @@ public class GerarContratoTransferencia implements RegraNegocioJava {
         DadosPedido dados = lerCabecalhoEItens(contexto, nuNota);
         if (dados.cabecalho.isEmpty()) return;
 
+        // GATE: nenhuma validação roda sem a flag Gerar Contrato Transferência.
         String flag = (String) dados.cabecalho.get("AD_GERCONTRTRANSF");
         if (!"S".equalsIgnoreCase(flag)) return;
 
@@ -59,6 +62,13 @@ public class GerarContratoTransferencia implements RegraNegocioJava {
 
         if (dados.itensComposicao.isEmpty()) {
             throw new Exception("Pedido sem itens para NUNOTA=" + nuNota);
+        }
+
+        if (!dados.produtosSemComposicao.isEmpty()) {
+            throw new Exception(
+                "Composição não encontrada no processo 40 (Beneficiamento Filial) " +
+                "para o(s) produto(s) CODPROD=" + dados.produtosSemComposicao
+            );
         }
 
         BigDecimal codProdPA = dados.itensComposicao.values().iterator().next();
@@ -148,10 +158,10 @@ public class GerarContratoTransferencia implements RegraNegocioJava {
 
                 BigDecimal codProdPA = q.getBigDecimal("CODPRODPA");
                 if (codProdPA == null) {
-                    throw new Exception(
-                        "Composição não encontrada no processo 40 " +
-                        "(Beneficiamento Filial) para o produto CODPROD=" + codProdMP
-                    );
+                    // Não lança aqui: validação só vale se a flag estiver ligada.
+                    // O throw é decidido em executaInterna, após o gate.
+                    dados.produtosSemComposicao.add(codProdMP);
+                    continue;
                 }
                 dados.itensComposicao.put(codProdMP, codProdPA);
             }
@@ -186,5 +196,6 @@ public class GerarContratoTransferencia implements RegraNegocioJava {
     private static final class DadosPedido {
         final Map<String, Object> cabecalho        = new HashMap<>();
         final Map<BigDecimal, BigDecimal> itensComposicao = new LinkedHashMap<>();
+        final List<BigDecimal> produtosSemComposicao = new ArrayList<>();
     }
 }
