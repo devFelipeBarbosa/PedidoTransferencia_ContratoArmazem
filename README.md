@@ -124,6 +124,9 @@ Index `IDX_AD_GERAPEDMATRIZ_STATUS (STATUS, DHCRIACAO)` acelera SELECT pendentes
 | `AD_PERCTOLEXCED` | NUMBER | % Tolerância Excedente |
 | `AD_TIPOTITULO_CT` | NUMBER | Tipo de Título |
 
+> **Obrigatoriedade (v2.1):** com `AD_GERCONTRTRANSF='S'`, os 11 campos abaixo são **obrigatórios**. Se algum estiver vazio, a regra aborta e lista as descrições dos pendentes:
+> `AD_CODSAF` (Código Safra), `AD_CODTIPVENDA_CT` (Tipo de Negociação CT), `AD_TIPOTITULO_CT` (Tipo de Título), `AD_UNICONVSC` (Unid. Conversão SC), `AD_TIPOCONTRATO` (Tipo Contrato), `AD_TIPCON` (Tipo de Contrato), `AD_QTDNEG_SC` (Quantidade Kg), `AD_VALNEGSC` (Valor Negociado SC), `AD_DTINIENTREGA` (Data Início Entrega), `AD_DTTERMINO` (Data Término), `AD_PERCTOLEXCED` (% Tolerância).
+
 ---
 
 ## Decisões Técnicas
@@ -342,6 +345,7 @@ JARs não são versionados (ver `.gitignore`). Copiados de:
 - **v1.2** — otimizações performance (1 query cabeçalho+itens, remoção logInfo, cotação simplificada)
 - **v1.3** — CODVEND=9 (Comprador) na Matriz
 - **v2.0** — **arquitetura async** com `ScheduledAction` + fila `AD_GERAPEDMATRIZ` + ServiceContext mock pra EDI
+- **v2.1** (2026-06-20) — **validação de campos obrigatórios** ao acionar `AD_GERCONTRTRANSF='S'`: 11 campos exigidos antes da geração. Se faltar algum, a regra aborta e lista as descrições dos campos pendentes, com o alerta *"Lembre-se: o preenchimento dessas variáveis são obrigatórias."*
 
 ---
 

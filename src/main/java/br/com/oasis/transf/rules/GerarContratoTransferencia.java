@@ -46,6 +46,8 @@ public class GerarContratoTransferencia implements RegraNegocioJava {
         String flag = (String) dados.cabecalho.get("AD_GERCONTRTRANSF");
         if (!"S".equalsIgnoreCase(flag)) return;
 
+        if (!validarCamposObrigatorios(contexto, dados.cabecalho)) return;
+
         BigDecimal codEmp = (BigDecimal) dados.cabecalho.get("CODEMP");
         if (codEmp == null || codEmp.intValue() != 4) {
             contexto.setSucesso(false);
@@ -83,6 +85,55 @@ public class GerarContratoTransferencia implements RegraNegocioJava {
             "Contrato de Armazém nº " + numContrato +
             " criado. Pedido de Compra (Matriz) será gerado em background."
         );
+    }
+
+    /** Campos obrigatórios ao acionar AD_GERCONTRTRANSF, na ordem de exibição (campo -> descrição). */
+    private static final Map<String, String> CAMPOS_OBRIGATORIOS = camposObrigatorios();
+
+    private static Map<String, String> camposObrigatorios() {
+        Map<String, String> campos = new LinkedHashMap<>();
+        campos.put("AD_CODSAF",         "Código Safra");
+        campos.put("AD_CODTIPVENDA_CT", "Tipo de Negociação (CT)");
+        campos.put("AD_TIPOTITULO_CT",  "Tipo de Título");
+        campos.put("AD_UNICONVSC",     "Unid. Conversão (SC)");
+        campos.put("AD_TIPOCONTRATO",  "Tipo Contrato");
+        campos.put("AD_TIPCON",        "Tipo de Contrato");
+        campos.put("AD_QTDNEG_SC",     "Quantidade (Kg)");
+        campos.put("AD_VALNEGSC",      "Valor Negociado (SC)");
+        campos.put("AD_DTINIENTREGA",  "Data Início Entrega");
+        campos.put("AD_DTTERMINO",     "Data Término");
+        campos.put("AD_PERCTOLEXCED",  "% Tolerância");
+        return campos;
+    }
+
+    /**
+     * Exige que todos os campos de CAMPOS_OBRIGATORIOS estejam preenchidos.
+     * Em caso de falta, mostra erro listando as descrições dos campos pendentes
+     * e retorna false (chamador deve abortar).
+     */
+    private boolean validarCamposObrigatorios(ContextoRegra contexto, Map<String, Object> cabecalho) throws Exception {
+        List<String> faltantes = new ArrayList<>();
+        for (Map.Entry<String, String> campo : CAMPOS_OBRIGATORIOS.entrySet()) {
+            if (estaVazio(cabecalho.get(campo.getKey()))) {
+                faltantes.add(campo.getValue());
+            }
+        }
+        if (faltantes.isEmpty()) return true;
+
+        StringBuilder msg = new StringBuilder("Os seguintes campos obrigatórios não foram preenchidos:");
+        for (String descricao : faltantes) {
+            msg.append("\n- ").append(descricao);
+        }
+        msg.append("\n\nLembre-se: o preenchimento dessas variáveis são obrigatórias.");
+
+        contexto.setSucesso(false);
+        contexto.mostraErro(msg.toString());
+        return false;
+    }
+
+    private boolean estaVazio(Object valor) {
+        if (valor == null) return true;
+        return (valor instanceof String) && ((String) valor).trim().isEmpty();
     }
 
     /** Insere linha em AD_GERAPEDMATRIZ pra processamento async pelo Lancador. */
