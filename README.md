@@ -229,7 +229,7 @@ Logs separados Regra (`GerarContratoTransferencia`) vs Lançador (`GerarPedidoMa
 2. **Build e copiar JAR**:
    ```bash
    ./gradlew clean jar
-   # build/libs/oasis-transf-contrato-1.0.0.jar
+   # build/libs/oasis-transf-contrato-1.1.0.jar
    ```
    Subir no **Repositório de Arquivos Sankhya**.
 
@@ -345,7 +345,7 @@ JARs não são versionados (ver `.gitignore`). Copiados de:
 - **v1.2** — otimizações performance (1 query cabeçalho+itens, remoção logInfo, cotação simplificada)
 - **v1.3** — CODVEND=9 (Comprador) na Matriz
 - **v2.0** — **arquitetura async** com `ScheduledAction` + fila `AD_GERAPEDMATRIZ` + ServiceContext mock pra EDI
-- **v2.1** (2026-06-20) — **validação de campos obrigatórios** ao acionar `AD_GERCONTRTRANSF='S'`: 11 campos exigidos antes da geração. Se faltar algum, a regra aborta e lista as descrições dos campos pendentes, com o alerta *"Lembre-se: o preenchimento dessas variáveis são obrigatórias."*
+- **v2.1** (2026-06-20, JAR `1.1.0`) — **validação de campos obrigatórios** ao acionar `AD_GERCONTRTRANSF='S'`: 11 campos exigidos antes da geração. Se faltar algum, a regra aborta e lista as descrições dos campos pendentes, com o alerta *"Lembre-se: o preenchimento dessas variáveis são obrigatórias."*
 
 ---
 
